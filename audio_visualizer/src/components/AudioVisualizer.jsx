@@ -1,16 +1,168 @@
 import { useState, useEffect, useRef } from 'react';
+import * as THREE from 'three';
 
-const AudioVisualizer = ({ audioFile }) => {
-  const canvasRef = useRef(null);
+const AudioVisualizer = ({ audioFile = '/audio/SKR-03-324.wav' }) => {
   const audioRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationRef = useRef(null);
+  const mountRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [visualizationType, setVisualizationType] = useState('waveform'); // 'waveform', 'bars', 'circular'
+  const sceneRef = useRef(null);
+  const sphereRef = useRef(null);
+  const glowRef = useRef(null);
 
   useEffect(() => {
-    // Clean up on unmount
+    // Initialize scene, camera, and renderer for glowing sphere
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+    
+    const camera = new THREE.PerspectiveCamera(
+      75, // Field of view
+      window.innerWidth / window.innerHeight, // Aspect ratio
+      0.1, // Near clipping plane
+      1000 // Far clipping plane
+    );
+    
+    // Create renderer with transparent background
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.6); // Set to a fixed proportion of the window
+    renderer.setClearColor(0x000000, 0);
+    
+    if (mountRef.current) {
+      // Clear previous content
+      while (mountRef.current.firstChild) {
+        mountRef.current.removeChild(mountRef.current.firstChild);
+      }
+      mountRef.current.appendChild(renderer.domElement);
+    }
+
+    // Create a glowing sphere
+    const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+    const sphereMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xffa500, // Sun-like color
+      emissive: 0xff7700,
+      emissiveIntensity: 0.5
+    });
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    sphereRef.current = sphere;
+    scene.add(sphere);
+
+    // Create a glow effect using a shader material
+    const glowGeometry = new THREE.SphereGeometry(1.2, 32, 32);
+    const glowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(0xffa500) },
+        viewVector: { value: camera.position }
+      },
+      vertexShader: `
+        uniform vec3 viewVector;
+        varying float intensity;
+        void main() {
+          vec3 vNormal = normalize(normalMatrix * normal);
+          vec3 vNormView = normalize(viewVector - modelViewMatrix * vec4(position, 1.0)).xyz;
+          intensity = pow(0.6 - dot(vNormal, vNormView), 2.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying float intensity;
+        void main() {
+          vec3 glow = glowColor * intensity;
+          gl_FragColor = vec4(glow, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      transparent: true
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowRef.current = glow;
+    scene.add(glow);
+
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    // Position the camera
+    camera.position.z = 5;
+
+    // Handle window resize
+    const handleResize = () => {
+      const width = window.innerWidth * 0.8;
+      const height = window.innerHeight * 0.6;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+    
+    window.addEventListener('resize', handleResize);
+
+    // Animation loop
+    const animate = () => {
+      animationRef.current = requestAnimationFrame(animate);
+
+      // Rotate the sphere and glow for a dynamic effect
+      if (sphereRef.current && glowRef.current) {
+        sphereRef.current.rotation.y += 0.005;
+        glowRef.current.rotation.y += 0.005;
+        
+        // If audio is playing, pulse the sphere based on audio data
+        if (isPlaying && analyserRef.current) {
+          const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+          analyserRef.current.getByteFrequencyData(dataArray);
+          
+          // Calculate average frequency value
+          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+          
+          // Scale factor to make the effect more visible
+          const scaleFactor = 1 + (avg / 255) * 0.3; 
+          
+          sphereRef.current.scale.set(scaleFactor, scaleFactor, scaleFactor);
+          glowRef.current.scale.set(scaleFactor + 0.2, scaleFactor + 0.2, scaleFactor + 0.2);
+          
+          // Change color based on frequency
+          const hue = (avg / 255) * 0.1; // Small hue shift
+          sphereRef.current.material.color.setHSL(0.1 + hue, 1, 0.5);
+          glowMaterial.uniforms.glowColor.value.setHSL(0.1 + hue, 1, 0.5);
+        }
+      }
+
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    // Cleanup on component unmount
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      
+      // Dispose of Three.js objects and renderer
+      scene.traverse((object) => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach((mat) => mat.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+      
+      if (renderer) {
+        renderer.dispose();
+      }
+
+      // Cancel any ongoing animation frames
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying]);
+
+  useEffect(() => {
+    // Clean up audio on unmount
     return () => {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
@@ -31,7 +183,7 @@ const AudioVisualizer = ({ audioFile }) => {
           cancelAnimationFrame(animationRef.current);
         }
       }
-      
+
       setupAudio();
     }
   }, [audioFile]);
@@ -42,41 +194,34 @@ const AudioVisualizer = ({ audioFile }) => {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       }
-      
+
       // Create audio element
       const audio = new Audio();
       audio.src = audioFile;
       audio.crossOrigin = 'anonymous';
       audioRef.current = audio;
-      
+
       // Create analyser node
       const analyser = audioContextRef.current.createAnalyser();
       analyser.fftSize = 2048;
       analyserRef.current = analyser;
-      
+
       // Connect audio to analyser
       const source = audioContextRef.current.createMediaElementSource(audio);
       source.connect(analyser);
       analyser.connect(audioContextRef.current.destination);
-      
+
       // Set up event listeners
       audio.addEventListener('play', () => {
         setIsPlaying(true);
-        draw();
       });
-      
+
       audio.addEventListener('pause', () => {
         setIsPlaying(false);
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
       });
-      
+
       audio.addEventListener('ended', () => {
         setIsPlaying(false);
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
       });
     } catch (error) {
       console.error("Error setting up audio:", error);
@@ -85,180 +230,48 @@ const AudioVisualizer = ({ audioFile }) => {
 
   const togglePlay = () => {
     if (!audioRef.current) return;
-    
+
     if (isPlaying) {
       audioRef.current.pause();
     } else {
       // Resume audio context if suspended (needed for some browsers)
-      if (audioContextRef.current.state === 'suspended') {
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         audioContextRef.current.resume();
       }
       audioRef.current.play();
     }
   };
 
-  const draw = () => {
-    if (!canvasRef.current || !analyserRef.current) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Clear the canvas
-    ctx.clearRect(0, 0, width, height);
-    
-    switch (visualizationType) {
-      case 'waveform':
-        drawWaveform(ctx, width, height);
-        break;
-      case 'bars':
-        drawFrequencyBars(ctx, width, height);
-        break;
-      case 'circular':
-        drawCircularVisualization(ctx, width, height);
-        break;
-      default:
-        drawWaveform(ctx, width, height);
-    }
-    
-    animationRef.current = requestAnimationFrame(draw);
-  };
-
-  const drawWaveform = (ctx, width, height) => {
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.fftSize;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    analyser.getByteTimeDomainData(dataArray);
-    
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgb(0, 217, 255)';
-    ctx.beginPath();
-    
-    const sliceWidth = width / bufferLength;
-    let x = 0;
-    
-    for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = v * height / 2;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-      
-      x += sliceWidth;
-    }
-    
-    ctx.lineTo(width, height / 2);
-    ctx.stroke();
-  };
-
-  const drawFrequencyBars = (ctx, width, height) => {
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    analyser.getByteFrequencyData(dataArray);
-    
-    const barWidth = (width / bufferLength) * 2.5;
-    let x = 0;
-    
-    for (let i = 0; i < bufferLength; i++) {
-      const barHeight = (dataArray[i] / 255) * height;
-      
-      // Create a gradient effect for the bars
-      const gradient = ctx.createLinearGradient(0, height, 0, height - barHeight);
-      gradient.addColorStop(0, '#4a148c');
-      gradient.addColorStop(0.5, '#7b1fa2');
-      gradient.addColorStop(1, '#e040fb');
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-      
-      x += barWidth + 1;
-    }
-  };
-
-  const drawCircularVisualization = (ctx, width, height) => {
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    analyser.getByteFrequencyData(dataArray);
-    
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const radius = Math.min(centerX, centerY) - 20;
-    
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius / 4, 0, 2 * Math.PI);
-    ctx.fillStyle = '#111';
-    ctx.fill();
-    
-    for (let i = 0; i < bufferLength; i++) {
-      const barHeight = (dataArray[i] / 255) * (radius / 2);
-      const angle = (i * 2 * Math.PI) / bufferLength;
-      
-      const x1 = centerX + Math.cos(angle) * radius / 2;
-      const y1 = centerY + Math.sin(angle) * radius / 2;
-      const x2 = centerX + Math.cos(angle) * (radius / 2 + barHeight);
-      const y2 = centerY + Math.sin(angle) * (radius / 2 + barHeight);
-      
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineWidth = 2;
-      
-      // Create a color based on frequency
-      const hue = (i / bufferLength) * 360;
-      ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
-      ctx.stroke();
-    }
-    
-    // Add some stars in the background for space theme
-    for (let i = 0; i < 50; i++) {
-      const x = Math.random() * width;
-      const y = Math.random() * height;
-      const radius = Math.random() * 2;
-      const opacity = Math.random();
-      
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, 2 * Math.PI);
-      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-      ctx.fill();
-    }
-  };
-
   return (
     <div className="audio-visualizer">
-      <canvas 
-        ref={canvasRef} 
-        width={800} 
-        height={400} 
+      <div 
+        ref={mountRef} 
         style={{ 
-          background: '#000', 
+          width: '80%', 
+          height: '60vh', 
+          margin: '0 auto',
           borderRadius: '8px',
-          width: '100%',
-          height: 'auto'
-        }}
+          background: 'rgba(0, 0, 0, 0.8)',
+          overflow: 'hidden'
+        }} 
       />
-      
-      <div className="controls">
-        <button onClick={togglePlay}>
+
+      <div className="controls" style={{ marginTop: '20px', textAlign: 'center' }}>
+        <button
+          onClick={togglePlay}
+          style={{
+            padding: '10px 20px',
+            fontSize: '16px',
+            borderRadius: '20px',
+            background: '#ffa500',
+            color: '#000',
+            border: 'none',
+            cursor: 'pointer',
+            marginRight: '10px'
+          }}
+        >
           {isPlaying ? 'Pause' : 'Play'}
         </button>
-        
-        <select 
-          value={visualizationType} 
-          onChange={(e) => setVisualizationType(e.target.value)}
-        >
-          <option value="waveform">Waveform</option>
-          <option value="bars">Frequency Bars</option>
-          <option value="circular">Circular (Space Theme)</option>
-        </select>
       </div>
     </div>
   );
