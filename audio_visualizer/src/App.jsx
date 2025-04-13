@@ -20,7 +20,7 @@ function App() {
         <StarBackground />
 
         <header>
-          <h1>Space Sound Visualizer🪐</h1>
+          <h1>Astro-visuals🪐</h1>
           <p>Sounds that are out-of-this-world!</p>
         </header>
 
