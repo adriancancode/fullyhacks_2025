@@ -10,10 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@p5-wrapper/react": "^4.4.2",
     "@react-three/drei": "^10.0.6",
     "@react-three/fiber": "^9.1.2",
+    "p5": "^1.11.3",
+    "p5.sound": "^0.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-p5": "^1.4.1",
     "three": "^0.175.0"
   },
   "devDependencies": {

@@ -9,7 +9,7 @@ const StarBackground = () => {
             <Stars
                 radius={50}
                 depth={40}
-                count={1000}
+                count={1300}
                 fade
             />
         </Canvas>
