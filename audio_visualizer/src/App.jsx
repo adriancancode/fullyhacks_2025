@@ -45,7 +45,7 @@ function App() {
         </div>
 
         <footer>
-          <p>Data from NASA and other space agencies. Created with Web Audio API and React.</p>
+          <p>Data from the University of Iowa, https://space.physics.uiowa.edu/plasma-wave/space-audio/. Created with Three.js and React.</p>
         </footer>
       </div>
     </>
