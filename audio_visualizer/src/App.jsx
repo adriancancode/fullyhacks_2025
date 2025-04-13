@@ -1,63 +1,54 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import AudioVisualizer from './components/AudioVisualizer';
 import StarBackground from './components/StarBackground';
-import Saturn from './assets/audio/Saturn-radio-emissions.mp3';
-import Jupiter from './assets/audio/Voyager-2-Jupiter-Arrival.mp3';
 import './App.css';
 
 function App() {
-  const audioRef = useRef(null);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
 
-  const audios = [
-    {name: 'Saturn radio emissions', url: Saturn},
-    {name: 'Voyager 2 arrival to Jupiter', url: Jupiter}
-  ];
-    
-  
-
-  const handleFileChange = (e) => {
-    setSelectedFile(e.target.value);
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type.match('audio.*')) {
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+    }
   };
 
   return (
     <>
-      
       <div className="app-container" style={{ position: 'relative', zIndex: 1 }}>
-        <StarBackground/>
-        
+        <StarBackground />
+
         <header>
           <h1>Space Sound Visualizer🪐</h1>
           <p>Sounds that are out-of-this-world!</p>
         </header>
 
-        <select onChange={handleFileChange} value={selectedFile}>
-          {audios.map((audio, index) => {
-            <option key={index} value={audio.url}>{option.name}</option>
-          })}
-        </select>
+        <div className="controls-section">
+          <div className="file-controls">
+            <h2>Upload Space Audio</h2>
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={handleFileChange}
+              id="audio-upload"
+            />
+          </div>
+        </div>
 
-        
-          {selectedFile ? (
-            <div className="visualizer-container">
-              <button>Play</button>
-              <audio ref={audioRef}>
-                <source src={selectedAudio} type="audio/mpeg" />
-              </audio>
-            </div>
-            
+        <div className="visualizer-container">
+          {audioUrl ? (
+            <AudioVisualizer audioFile={audioUrl} />
           ) : (
-            <div className="empty-state">
-              <p>Select an audio file to begin visualization</p>
-            </div>
+            <AudioVisualizer />
           )}
-        
+        </div>
+
         <footer>
-          <p>Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/</p>
+          <p>Data from NASA and other space agencies. Created with Web Audio API and React.</p>
         </footer>
       </div>
     </>
-    
   );
 }
 
