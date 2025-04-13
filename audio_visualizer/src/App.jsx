@@ -6,18 +6,38 @@ import './App.css';
 
 function App() {
   const audioRef = useRef(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [audioUrl, setAudioUrl] = useState(null);
+  const [selectedFile, setSelectedFile] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const audios = [
     {name: 'Saturn radio emissions', url: Saturn},
     {name: 'Voyager 2 arrival to Jupiter', url: Jupiter}
   ];
     
-  
+  const handlePlay = () => {
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+    else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+  const handleRestart = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.load();
+      setIsPlaying(true);
+    }
+  }
 
   const handleFileChange = (e) => {
     setSelectedFile(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.pause(); // Stop current playback before switching
+      audioRef.current.load();  // Load new source
+    }
   };
 
   return (
@@ -31,26 +51,27 @@ function App() {
           <p>Sounds that are out-of-this-world!</p>
         </header>
 
-        <select onChange={handleFileChange} value={selectedFile}>
-          {audios.map((audio, index) => {
-            <option key={index} value={audio.url}>{option.name}</option>
-          })}
+        <select onChange={handleFileChange} value={selectedFile || ''}>
+          <option value="">Select a sound</option>
+          {audios.map((audio, index) => (
+            <option key={index} value={audio.url}>{audio.name}</option>
+          ))}
         </select>
 
         
-          {selectedFile ? (
-            <div className="visualizer-container">
-              <button>Play</button>
-              <audio ref={audioRef}>
-                <source src={selectedAudio} type="audio/mpeg" />
-              </audio>
-            </div>
-            
-          ) : (
-            <div className="empty-state">
-              <p>Select an audio file to begin visualization</p>
-            </div>
-          )}
+        {selectedFile ? (
+          <div className="visualizer-container">
+            <button onClick={handlePlay}>{isPlaying ? "Pause" : "Play"}</button>
+            <button onCLick={handleRestart}>Restart</button>
+            <audio ref={audioRef}>
+              <source src={selectedFile} type="audio/mpeg" />
+            </audio>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>Select an audio file to begin visualization</p>
+          </div>
+        )}
         
         <footer>
           <p>Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/</p>
